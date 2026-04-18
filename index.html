@@ -1,177 +1,314 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Eye Contact Prompter</title>
+    <meta charset="UTF-8">
+    <title>Eye-Contact Teleprompter & Recorder</title>
     <style>
         body {
             margin: 0;
             background: #000;
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
             overflow: hidden;
+            color: white;
         }
-        /* Video Background */
-        video {
+
+        /* --- VIDEO BACKGROUND --- */
+        video#webcam {
             position: fixed;
             top: 0;
             left: 0;
             width: 100vw;
             height: 100vh;
             object-fit: cover;
-            transform: scaleX(-1); /* Mirror mode */
+            transform: scaleX(-1); /* Mirror Self-View */
             z-index: 1;
         }
-        /* Text Container (Upper Side) */
-        #text-box {
+
+        /* --- TEXT OVERLAY (UPPER SIDE) --- */
+        /* Positioned high so you look near the camera lens */
+        #teleprompter-container {
             position: fixed;
-            top: 5%; /* Close to the camera */
+            top: 8%; 
             left: 50%;
             transform: translateX(-50%);
             width: 90%;
             max-width: 1000px;
             z-index: 10;
             text-align: center;
-            background: rgba(0, 0, 0, 0.3); /* Slight dark background for readability */
+            background: rgba(0, 0, 0, 0.6);
             padding: 20px;
-            border-radius: 10px;
-            display: none; /* Hidden until started */
+            border-radius: 12px;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: opacity 0.3s;
         }
-        #script-line {
-            color: #FFF;
-            font-size: 2.5rem;
-            text-shadow: 2px 2px 4px #000;
-            font-weight: bold;
+
+        #script-text {
+            font-size: 2.8vw;
+            line-height: 1.5;
+            color: #fff;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            font-weight: 500;
         }
-        /* Controls */
-        #setup {
+
+        /* --- CONTROLS --- */
+        #setup-screen {
             position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: #111;
             z-index: 100;
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            text-align: center;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
         }
+
         textarea {
             width: 80%;
+            max-width: 600px;
             height: 150px;
             margin-bottom: 20px;
+            padding: 15px;
             font-size: 16px;
-            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            background: #222;
+            color: white;
+            resize: none;
         }
+
         .btn {
             background: #007bff;
             color: white;
             border: none;
-            padding: 15px 30px;
+            padding: 12px 30px;
             font-size: 18px;
+            border-radius: 30px;
             cursor: pointer;
-            border-radius: 5px;
+            margin: 5px;
+            transition: background 0.2s;
+            font-weight: bold;
         }
         .btn:hover { background: #0056b3; }
-        
-        /* Navigation Buttons */
-        #nav-buttons {
+        .btn-record {
+            background: #dc3545;
+        }
+        .btn-record:hover { background: #a71d2a; }
+        .btn-stop {
+            background: #ffc107;
+            color: black;
+        }
+
+        #bottom-bar {
             position: fixed;
-            bottom: 30px;
+            bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 20;
-            display: none;
-            gap: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            background: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 40px;
+            backdrop-filter: blur(5px);
+            display: none; /* Hidden initially */
         }
-        .nav-btn {
-            background: rgba(255,255,255,0.8);
-            color: black;
-            border: none;
-            padding: 15px 40px;
-            font-size: 20px;
-            border-radius: 30px;
-            cursor: pointer;
+
+        #progress {
+            font-size: 14px;
+            color: #ccc;
+            min-width: 50px;
+            text-align: center;
         }
+
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
 
-    <!-- Setup Screen -->
-    <div id="setup">
-        <h2>1. Paste Script & Start Camera</h2>
-        <textarea id="inputText" placeholder="Paste text here. Sentences ending in a period will become separate slides."></textarea>
-        <br>
-        <button class="btn" onclick="startApp()">Start Camera</button>
-        <p id="error-msg" style="color: red; display:none;">Camera blocked or unavailable. See instructions below.</p>
+    <!-- 1. SETUP SCREEN -->
+    <div id="setup-screen">
+        <h1>Video Recorder & Teleprompter</h1>
+        <p style="color:#aaa; margin-bottom:20px;">Paste your script. The text will appear near your camera so you maintain eye contact.</p>
+        <textarea id="input-script" placeholder="Paste your script here...&#10;&#10;Example: Hello everyone. Welcome to the channel. Today we are discussing web development."></textarea>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn" onclick="startTeleprompter()">Start Camera</button>
+        </div>
     </div>
 
-    <!-- Video Feed -->
-    <video id="video" autoplay muted playsinline></video>
+    <!-- 2. VIDEO VIEW -->
+    <video id="webcam" autoplay muted playsinline></video>
 
-    <!-- Text Display -->
-    <div id="text-box">
-        <div id="script-line"></div>
+    <!-- 3. TELEPROMPTER OVERLAY -->
+    <div id="teleprompter-container" class="hidden">
+        <div id="script-text"></div>
     </div>
 
-    <!-- Navigation -->
-    <div id="nav-buttons">
-        <button class="nav-btn" onclick="prevText()">◀ Back</button>
-        <button class="nav-btn" onclick="nextText()">Next ▶</button>
+    <!-- 4. BOTTOM CONTROLS -->
+    <div id="bottom-bar">
+        <button class="btn" onclick="prevSlide()" style="padding: 10px 20px;">◄</button>
+        <span id="progress">1 / 1</span>
+        <button class="btn" onclick="nextSlide()" style="padding: 10px 20px;">►</button>
+        
+        <div style="width: 1px; height: 30px; background: #555; margin: 0 15px;"></div>
+
+        <button id="rec-btn" class="btn btn-record" onclick="toggleRecording()">Start Recording</button>
+        <button id="stop-btn" class="btn btn-stop hidden" onclick="toggleRecording()">Stop Recording</button>
     </div>
+
+    <!-- Hidden element for downloading -->
+    <a id="downloader" style="display:none;"></a>
 
     <script>
+        // --- Variables ---
         let slides = [];
         let currentSlide = 0;
+        let mediaRecorder;
+        let recordedChunks = [];
+        let stream;
+        let isRecording = false;
 
-        async function startApp() {
-            // 1. Get Text
-            const rawText = document.getElementById('inputText').value;
-            if (!rawText) return alert("Please enter some text first!");
+        const video = document.getElementById('webcam');
+        const setupScreen = document.getElementById('setup-screen');
+        const bottomBar = document.getElementById('bottom-bar');
+        const teleprompter = document.getElementById('teleprompter-container');
+        const scriptText = document.getElementById('script-text');
+        const progressText = document.getElementById('progress');
+
+        // --- Step 1: Initialize ---
+        async function startTeleprompter() {
+            const text = document.getElementById('input-script').value;
             
-            // Split by periods or new lines
-            slides = rawText.split(/[.\n]/).filter(s => s.trim().length > 0);
+            // Split text by sentences (., !, ?) or new lines
+            slides = text.split(/(?<=[.!?])\s*|\n/).filter(s => s.trim().length > 0);
             
-            // 2. Start Camera
-            const video = document.getElementById('video');
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-                video.srcObject = stream;
-            } catch (err) {
-                console.error(err);
-                document.getElementById('error-msg').style.display = 'block';
+            if (slides.length === 0) {
+                alert("Please enter a script first.");
                 return;
             }
 
-            // 3. Switch UI
-            document.getElementById('setup').style.display = 'none';
-            document.getElementById('text-box').style.display = 'block';
-            document.getElementById('nav-buttons').style.display = 'flex';
-            
-            updateText();
+            try {
+                // Request Camera AND Microphone
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "user", width: 1920, height: 1080 },
+                    audio: true 
+                });
+                
+                video.srcObject = stream;
+                
+                // UI Changes
+                setupScreen.classList.add('hidden');
+                bottomBar.style.display = 'flex';
+                teleprompter.classList.remove('hidden');
+                
+                updateSlide();
+
+            } catch (err) {
+                alert("Error: Could not access camera or microphone. Please check permissions.\n\n" + err);
+            }
         }
 
-        function updateText() {
-            document.getElementById('script-line').innerText = slides[currentSlide];
+        // --- Step 2: Teleprompter Navigation ---
+        function updateSlide() {
+            scriptText.style.opacity = 0;
+            setTimeout(() => {
+                scriptText.innerText = slides[currentSlide];
+                scriptText.style.opacity = 1;
+                progressText.innerText = `${currentSlide + 1} / ${slides.length}`;
+            }, 200);
         }
 
-        function nextText() {
+        function nextSlide() {
             if (currentSlide < slides.length - 1) {
                 currentSlide++;
-                updateText();
+                updateSlide();
             }
         }
 
-        function prevText() {
+        function prevSlide() {
             if (currentSlide > 0) {
                 currentSlide--;
-                updateText();
+                updateSlide();
             }
         }
 
-        // Keyboard Shortcuts (Right Arrow = Next)
+        // Keyboard Shortcuts
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowRight') nextText();
-            if (e.key === 'ArrowLeft') prevText();
+            if (setupScreen.classList.contains('hidden')) {
+                if (e.key === 'ArrowRight') nextSlide();
+                if (e.key === 'ArrowLeft') prevSlide();
+            }
         });
+
+        // --- Step 3: Recording Logic ---
+        function toggleRecording() {
+            if (!isRecording) {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        }
+
+        function startRecording() {
+            recordedChunks = [];
+            
+            // Try to use VP9 for better quality, fallback to default
+            let options = { mimeType: 'video/webm;codecs=vp9,opus' };
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                options = { mimeType: 'video/webm' }; 
+            }
+
+            try {
+                mediaRecorder = new MediaRecorder(stream, options);
+            } catch (e) {
+                console.error("MediaRecorder error:", e);
+                return;
+            }
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = downloadVideo;
+
+            mediaRecorder.start();
+            isRecording = true;
+
+            // UI Update
+            document.getElementById('rec-btn').classList.add('hidden');
+            document.getElementById('stop-btn').classList.remove('hidden');
+            document.body.style.border = "5px solid #dc3545"; // Red border recording indicator
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+            isRecording = false;
+
+            // UI Update
+            document.getElementById('rec-btn').classList.remove('hidden');
+            document.getElementById('stop-btn').classList.add('hidden');
+            document.body.style.border = "none";
+        }
+
+        function downloadVideo() {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.getElementById('downloader');
+            a.href = url;
+            a.download = 'recording.webm';
+            a.click();
+            
+            // Cleanup
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 100);
+        }
     </script>
 </body>
 </html>
