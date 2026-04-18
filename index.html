@@ -1,138 +1,177 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voice Activated Script Reader</title>
+    <title>Eye Contact Prompter</title>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f0f0f0; }
-        #script-input { width: 80%; height: 150px; font-size: 16px; padding: 10px; margin-bottom: 20px; }
-        #start-btn { padding: 15px 30px; font-size: 18px; cursor: pointer; background: #4CAF50; color: white; border: none; border-radius: 5px; }
-        #start-btn:disabled { background: #ccc; }
-        #display-area { margin-top: 30px; padding: 40px; background: white; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        #current-line { font-size: 32px; font-weight: bold; color: #333; margin-bottom: 20px; }
-        #next-line { font-size: 24px; color: #777; }
-        #status { margin-top: 20px; font-style: italic; color: #555; }
+        body {
+            margin: 0;
+            background: #000;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        /* Video Background */
+        video {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror mode */
+            z-index: 1;
+        }
+        /* Text Container (Upper Side) */
+        #text-box {
+            position: fixed;
+            top: 5%; /* Close to the camera */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 1000px;
+            z-index: 10;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.3); /* Slight dark background for readability */
+            padding: 20px;
+            border-radius: 10px;
+            display: none; /* Hidden until started */
+        }
+        #script-line {
+            color: #FFF;
+            font-size: 2.5rem;
+            text-shadow: 2px 2px 4px #000;
+            font-weight: bold;
+        }
+        /* Controls */
+        #setup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        textarea {
+            width: 80%;
+            height: 150px;
+            margin-bottom: 20px;
+            font-size: 16px;
+            padding: 10px;
+        }
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        .btn:hover { background: #0056b3; }
+        
+        /* Navigation Buttons */
+        #nav-buttons {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            display: none;
+            gap: 20px;
+        }
+        .nav-btn {
+            background: rgba(255,255,255,0.8);
+            color: black;
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            border-radius: 30px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
 
-    <h1>Voice Activated Script Reader</h1>
-    
-    <!-- 1. Input your text here -->
-    <textarea id="script-input" placeholder="Paste your script here (one sentence per line)...
-Example:
-Hello and welcome to the show.
-Today we are learning about voice recognition.
-This is the next line."></textarea>
-    
-    <br>
-    
-    <!-- 2. Start Button -->
-    <button id="start-btn" onclick="startListening()">Start Listening</button>
-    
-    <!-- 3. Display Area -->
-    <div id="display-area">
-        <div id="current-line">Waiting for script...</div>
-        <div id="next-line"></div>
+    <!-- Setup Screen -->
+    <div id="setup">
+        <h2>1. Paste Script & Start Camera</h2>
+        <textarea id="inputText" placeholder="Paste text here. Sentences ending in a period will become separate slides."></textarea>
+        <br>
+        <button class="btn" onclick="startApp()">Start Camera</button>
+        <p id="error-msg" style="color: red; display:none;">Camera blocked or unavailable. See instructions below.</p>
     </div>
-    
-    <div id="status">Status: Idle</div>
+
+    <!-- Video Feed -->
+    <video id="video" autoplay muted playsinline></video>
+
+    <!-- Text Display -->
+    <div id="text-box">
+        <div id="script-line"></div>
+    </div>
+
+    <!-- Navigation -->
+    <div id="nav-buttons">
+        <button class="nav-btn" onclick="prevText()">◀ Back</button>
+        <button class="nav-btn" onclick="nextText()">Next ▶</button>
+    </div>
 
     <script>
-        let lines = [];
-        let currentLineIndex = 0;
-        let recognition;
+        let slides = [];
+        let currentSlide = 0;
 
-        // Check if the browser supports Speech Recognition
-        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-            alert("Sorry, your browser does not support Speech Recognition. Please use Google Chrome.");
-        } else {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            recognition = new SpeechRecognition();
-            recognition.continuous = true; // Keep listening even if you pause
-            recognition.interimResults = true; // Show results while you speak
-            recognition.lang = 'en-US';
-
-            recognition.onresult = function(event) {
-                // Get the words spoken
-                let transcript = '';
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    transcript += event.results[i][0].transcript;
-                }
-                
-                document.getElementById('status').innerText = "Heard: " + transcript;
-
-                // Logic: Check if the spoken text matches the current line
-                if (lines.length > 0 && currentLineIndex < lines.length) {
-                    let currentTarget = lines[currentLineIndex].toLowerCase().trim();
-                    
-                    // Simple match check: if the spoken text contains most of the target line
-                    // You can adjust the logic to be stricter if needed
-                    if (transcript.toLowerCase().includes(currentTarget.substring(0, 10)) && transcript.length > 5) {
-                        nextLine();
-                        // Restart recognition to clear the buffer for the next line
-                        recognition.stop(); 
-                    }
-                }
-            };
-
-            recognition.onerror = function(event) {
-                console.error("Error:", event.error);
-                document.getElementById('status').innerText = "Error: " + event.error;
-            };
-
-            recognition.onend = function() {
-                // Automatically restart if we haven't finished the script
-                if (currentLineIndex < lines.length && document.getElementById('start-btn').disabled) {
-                    recognition.start();
-                }
-            };
-        }
-
-        function startListening() {
-            const inputText = document.getElementById('script-input').value;
+        async function startApp() {
+            // 1. Get Text
+            const rawText = document.getElementById('inputText').value;
+            if (!rawText) return alert("Please enter some text first!");
             
-            // Split text by new lines
-            lines = inputText.split('\n').filter(line => line.trim() !== "");
+            // Split by periods or new lines
+            slides = rawText.split(/[.\n]/).filter(s => s.trim().length > 0);
             
-            if (lines.length === 0) {
-                alert("Please enter some text first!");
+            // 2. Start Camera
+            const video = document.getElementById('video');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                video.srcObject = stream;
+            } catch (err) {
+                console.error(err);
+                document.getElementById('error-msg').style.display = 'block';
                 return;
             }
 
-            currentLineIndex = 0;
-            updateDisplay();
+            // 3. Switch UI
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('text-box').style.display = 'block';
+            document.getElementById('nav-buttons').style.display = 'flex';
             
-            recognition.start();
-            document.getElementById('start-btn').disabled = true;
-            document.getElementById('start-btn').innerText = "Listening...";
-            document.getElementById('status').innerText = "Status: Listening... Speak the text above.";
+            updateText();
         }
 
-        function nextLine() {
-            currentLineIndex++;
-            if (currentLineIndex < lines.length) {
-                updateDisplay();
-            } else {
-                document.getElementById('current-line').innerText = "End of Script!";
-                document.getElementById('next-line').innerText = "";
-                document.getElementById('status').innerText = "Status: Finished.";
-                recognition.stop();
-                document.getElementById('start-btn').disabled = false;
-                document.getElementById('start-btn').innerText = "Start Again";
+        function updateText() {
+            document.getElementById('script-line').innerText = slides[currentSlide];
+        }
+
+        function nextText() {
+            if (currentSlide < slides.length - 1) {
+                currentSlide++;
+                updateText();
             }
         }
 
-        function updateDisplay() {
-            document.getElementById('current-line').innerText = lines[currentLineIndex];
-            // Show the next line in smaller text if it exists
-            if (currentLineIndex + 1 < lines.length) {
-                document.getElementById('next-line').innerText = "Next: " + lines[currentLineIndex + 1];
-            } else {
-                document.getElementById('next-line').innerText = "";
+        function prevText() {
+            if (currentSlide > 0) {
+                currentSlide--;
+                updateText();
             }
         }
+
+        // Keyboard Shortcuts (Right Arrow = Next)
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') nextText();
+            if (e.key === 'ArrowLeft') prevText();
+        });
     </script>
 </body>
 </html>
